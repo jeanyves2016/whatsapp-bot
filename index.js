@@ -1,19 +1,18 @@
+const axios = require("axios")
 const { default: makeWASocket, useMultiFileAuthState } = require("@whiskeysockets/baileys")
 const express = require("express")
 const QRCode = require("qrcode")
 const P = require("pino")
-const axios = require("axios")
 
 const app = express()
 let latestQR = null
 
-// -------- IA FUNCTION ----------
-async function askAI(question) {
+async function askAI(question){
 
-    try {
+    try{
 
         const response = await axios.post(
-            "http://ollama:11434/api/generate",
+            "http://vswg0g0o400cwckkkckg40gs-203209172076:11434/api/generate",
             {
                 model: "mistral",
                 prompt: question,
@@ -23,17 +22,17 @@ async function askAI(question) {
 
         return response.data.response
 
-    } catch (error) {
+    }catch(err){
 
-        console.log("Erreur IA:", error.message)
-        return "Désolé, je rencontre un problème technique."
+        console.log(err.message)
+
+        return "Je rencontre un problème technique."
 
     }
 
 }
 
-// -------- WHATSAPP BOT ----------
-async function startBot() {
+async function startBot(){
 
     const { state, saveCreds } = await useMultiFileAuthState("auth")
 
@@ -48,55 +47,32 @@ async function startBot() {
 
         const msg = messages[0]
 
-        if (!msg.message || msg.key.fromMe) return
+        if(!msg.message || msg.key.fromMe) return
 
         const text = msg.message.conversation || ""
 
         console.log("Message reçu:", text)
 
-        // MENU
-        if (text.toLowerCase() === "bonjour") {
-
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `Bonjour 👋
-
-Je suis l'assistant automatique.
-
-1️⃣ Informations
-2️⃣ Support
-3️⃣ Agent humain
-
-Ou posez directement votre question.`
-            })
-
-            return
-        }
-
-        // IA RESPONSE
         const aiResponse = await askAI(text)
 
-        await sock.sendMessage(msg.key.remoteJid, {
+        await sock.sendMessage(msg.key.remoteJid,{
             text: aiResponse
         })
 
     })
 
-    sock.ev.on("connection.update", async (update) => {
+    sock.ev.on("connection.update", async(update)=>{
 
         const { connection, qr } = update
 
-        if (qr) {
-
+        if(qr){
             latestQR = await QRCode.toDataURL(qr)
             console.log("QR généré")
-
         }
 
-        if (connection === "open") {
-
-            console.log("✅ Bot connecté")
+        if(connection === "open"){
+            console.log("Bot connecté")
             latestQR = null
-
         }
 
     })
@@ -105,19 +81,18 @@ Ou posez directement votre question.`
 
 startBot()
 
-// -------- SERVER ----------
-app.get("/", (req, res) => {
+app.get("/",(req,res)=>{
     res.send("Bot actif 🚀")
 })
 
-app.get("/qr", (req, res) => {
+app.get("/qr",(req,res)=>{
 
-    if (!latestQR) return res.send("Pas de QR disponible")
+    if(!latestQR) return res.send("Pas de QR disponible")
 
     res.send(`<img src="${latestQR}" />`)
 
 })
 
-app.listen(3000, () => {
-    console.log("Serveur démarré sur 3000")
+app.listen(3000,()=>{
+    console.log("Serveur lancé sur 3000")
 })
