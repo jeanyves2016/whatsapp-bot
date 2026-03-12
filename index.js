@@ -1,98 +1,59 @@
-const axios = require("axios")
-const { default: makeWASocket, useMultiFileAuthState } = require("@whiskeysockets/baileys")
-const express = require("express")
-const QRCode = require("qrcode")
-const P = require("pino")
+const express = require("express");
+const { Client, LocalAuth } = require("whatsapp-web.js");
+const QRCode = require("qrcode");
 
-const app = express()
-let latestQR = null
+const app = express();
+const PORT = 3000;
 
-async function askAI(question){
+let qrCodeData = null;
 
-    try{
+const client = new Client({
+  authStrategy: new LocalAuth(),
+  puppeteer: {
+    args: ["--no-sandbox", "--disable-setuid-sandbox"]
+  }
+});
 
-        const response = await axios.post(
-            "http://vswg0g0o400cwckkkckg40gs-203209172076:11434/api/generate",
-            {
-                model: "mistral",
-                prompt: question,
-                stream: false
-            }
-        )
+client.on("qr", (qr) => {
+  console.log("QR généré");
+  qrCodeData = qr;
+});
 
-        return response.data.response
+client.on("ready", () => {
+  console.log("WhatsApp connecté 🚀");
+});
 
-    }catch(err){
+client.on("message", message => {
+  console.log("Message reçu:", message.body);
 
-        console.log(err.message)
+  if (message.body === "ping") {
+    message.reply("pong 🏓");
+  }
+});
 
-        return "Je rencontre un problème technique."
+client.initialize();
 
-    }
+app.get("/", (req, res) => {
+  res.send("Bot actif 🚀");
+});
 
-}
+app.get("/qr", async (req, res) => {
+  if (!qrCodeData) {
+    return res.send("Pas de QR disponible");
+  }
 
-async function startBot(){
+  const qrImage = await QRCode.toDataURL(qrCodeData);
 
-    const { state, saveCreds } = await useMultiFileAuthState("auth")
+  res.send(`
+    <html>
+    <body>
+    <h2>Scanner le QR WhatsApp</h2>
+    <img src="${qrImage}" />
+    </body>
+    </html>
+  `);
+});
 
-    const sock = makeWASocket({
-        logger: P({ level: "silent" }),
-        auth: state
-    })
-
-    sock.ev.on("creds.update", saveCreds)
-
-    sock.ev.on("messages.upsert", async ({ messages }) => {
-
-        const msg = messages[0]
-
-        if(!msg.message || msg.key.fromMe) return
-
-        const text = msg.message.conversation || ""
-
-        console.log("Message reçu:", text)
-
-        const aiResponse = await askAI(text)
-
-        await sock.sendMessage(msg.key.remoteJid,{
-            text: aiResponse
-        })
-
-    })
-
-    sock.ev.on("connection.update", async(update)=>{
-
-        const { connection, qr } = update
-
-        if(qr){
-            latestQR = await QRCode.toDataURL(qr)
-            console.log("QR généré")
-        }
-
-        if(connection === "open"){
-            console.log("Bot connecté")
-            latestQR = null
-        }
-
-    })
-
-}
-
-startBot()
-
-app.get("/",(req,res)=>{
-    res.send("Bot actif 🚀")
-})
-
-app.get("/qr",(req,res)=>{
-
-    if(!latestQR) return res.send("Pas de QR disponible")
-
-    res.send(`<img src="${latestQR}" />`)
-
-})
-
-app.listen(3000,()=>{
-    console.log("Serveur lancé sur 3000")
-})
+app.listen(PORT, () => {
+  console.log("Serveur lancé sur", PORT);
+});
